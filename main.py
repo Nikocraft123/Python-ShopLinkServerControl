@@ -5,7 +5,7 @@ from constants import *
 import socket as so
 from utils import file
 from utils import time
-from utils.crypt import rsa
+from utils.crypt import rsa, aes
 
 
 # CLASSES
@@ -104,10 +104,88 @@ class App:
         self.socket.send(str(len(encrypted_password)).zfill(8).encode("utf-8"))
         self.socket.send(encrypted_password)
 
-        print(password)
+        # Input loop
+        print("")
+        print("Input:")
+        self.loop(password)
 
         # Quit
         self.quit()
+
+
+    # Input loop
+    def loop(self, password):
+
+        # Input loop
+        while True:
+
+            command = input("> ")
+            if not self.send_msg(aes.get_key(password), self.socket, command):
+                break
+            if command.lower().strip() == "stop":
+                print("Server closed!")
+                break
+            if command.lower().strip() == "exit":
+                break
+            output = App.receive(aes.get_key(password), self.socket)
+            if not output:
+                print("Server closed!")
+                break
+            print("")
+            print(output.decode("utf-8"))
+
+
+    # STATIC METHODS
+
+    # Send
+    @staticmethod
+    def send(key: bytes, socket: so.socket, data: bytes) -> bool:
+
+        try:
+
+            # Encrypt the data
+            encrypted_data = aes.encrypt_bytes(key, data)
+
+            # Send the header with the data size
+            socket.send(str(len(encrypted_data)).zfill(16).encode("utf-8"))
+
+            # Send the encrypted data
+            socket.send(encrypted_data)
+
+            # Return true
+            return True
+
+        except so.error:
+
+            # Return false
+            return False
+
+    # Send message
+    @staticmethod
+    def send_msg(key: bytes, socket: so.socket, msg: str) -> bool:
+
+        # Send the encoded message
+        return App.send(key, socket, msg.encode("utf-8"))
+
+    # Receive
+    @staticmethod
+    def receive(key: bytes, socket: so.socket) -> bytes | None:
+
+        try:
+
+            # Receive the data size
+            length = int(socket.recv(16).decode("utf-8"))
+
+            # Receive the encrypted data
+            encrypted_data = socket.recv(length)
+
+            # Decrypt and return the data
+            return aes.decrypt_bytes(key, encrypted_data)
+
+        except (so.error, so.timeout):
+
+            # Return none
+            return None
 
     # Quit
     def quit(self):
